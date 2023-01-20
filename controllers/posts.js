@@ -1,0 +1,152 @@
+import Post from '../models/post.js';
+import User from '../models/user.js';
+import Comment from '../models/comment.js';
+import path, { dirname } from 'path'
+import { fileURLToPath } from 'url';
+
+//Create post
+export const createPost = async (req, res) => {
+  try {
+    const { title, text } = req.body;
+    const user = await User.findById(req.userId)
+
+    if (req.files) {
+      let filename = Date.now().toString() + req.files.image.name
+      const __dirname = dirname(fileURLToPath(import.meta.url))
+      req.files.image.mv(path.join(__dirname, '..', 'uploads', filename))
+
+      const newPostWithImage = new Post({
+        username: user.username,
+        title,
+        text,
+        imgUrl: filename,
+        author: req.userId,
+      })
+
+      await newPostWithImage.save();
+      await User.findByIdAndUpdate(req.userId, {
+        $push: { posts: newPostWithImage },
+      })
+      return res.json(newPostWithImage)
+    }
+    const newPostWithoutImage = new Post({
+      username: user.username,
+      title,
+      text,
+      imgUrl: '',
+      author: req.userId,
+    })
+    await newPostWithoutImage.save();
+    await User.findByIdAndUpdate(req.userId, {
+      $push: { posts: newPostWithoutImage }
+    })
+
+
+  } catch (error) {
+    res.json({ message: "cannot create post" })
+  }
+}
+
+//Get all
+export const getAll = async (req, res) => {
+  try {
+    const posts = await Post.find().sort('-createdAt')
+    const popularPosts = await Post.find().limit(5).sort('-views')
+    if (!posts) {
+      return res.json({ message: "there are not posts" })
+    }
+    res.json({ posts, popularPosts })
+
+  } catch (error) {
+    res.json({ message: "Something went wrong." })
+  }
+}
+
+//Get by id
+export const getById = async (req, res) => {
+  try {
+    // const { id } = req.body;
+    const post = await Post.findByIdAndUpdate(req.params.id, {
+      $inc: { views: 1 },
+    })
+
+    res.json(post)
+
+  } catch (error) {
+    res.json({ message: "Something went wrong." })
+  }
+}
+
+//Get my posts
+export const getMyPosts = async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    const list = await Promise.all(
+      user.posts.map(post => {
+        return Post.findById(post._id)
+      }),
+    )
+
+    res.json(list)
+
+  } catch (error) {
+    res.json({ message: "Something went wrong." })
+  }
+}
+
+//Delete post
+export const deletePost = async (req, res) => {
+  try {
+    const post = await Post.findByIdAndDelete(req.params.id)
+    if (!post) return res.json({ message: 'Post does not exist' })
+
+    await User.findByIdAndUpdate(req.userId, {
+      $pull: { posts: req.params.id }
+    })
+
+    res.json(list)
+
+  } catch (error) {
+    res.json({ message: "Something went wrong." })
+  }
+}
+
+//Update post
+export const updatePost = async (req, res) => {
+  try {
+    const { title, text, id } = req.body;
+    const post = await Post.findByIdAndUpdate(id)
+
+    if (req.files) {
+      let filename = Date.now().toString() + req.files.image.name
+      const __dirname = dirname(fileURLToPath(import.meta.url))
+      req.files.image.mv(path.join(__dirname, '..', 'uploads', filename))
+      post.imgUrl = filename || ''
+    }
+    post.title = title
+    post.text = text
+
+    await post.save();
+
+    res.json(post)
+
+  } catch (error) {
+    res.json({ message: "Something went wrong." })
+  }
+}
+
+//Get post comments
+export const getPostComments = async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    const list = await Promise.all(
+      post.comments.map(comment => {
+        return Comment.findById(comment)
+      }),
+    )
+    res.json(list);
+
+  } catch (error) {
+    res.json({ message: "Something went wrong." })
+  }
+}
